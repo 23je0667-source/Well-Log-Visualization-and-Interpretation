@@ -1,0 +1,274 @@
+---
+title: "Well Log Visualization and Interpretation"
+author: "Tobi Ore"
+date: "12/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+```
+
+## Objectives
+The main objective of this project is to apply open source tools to carry out a basic petrophysical well log analysis. This involves transforming the well log measurements into reservoir properties like porosity, water saturation, clay content etc. The uptmost goal is to have as much information about the subsurface as possible.
+
+## Data Source
+The format of the data utilized for this project is the Log ASCII Standard (LAS). LAS is a standard file-format common in the oil-and-gas and water well industries to store well log information. This file type is like a typical text file, however, the formating is unique. 
+
+Data of this nature is in abundance due to the high volume of oil and gas exploration. In this project, data from the Department of the Interior U.S. Geological Survey repository of Wildcat Wells in the National Petroleum Reserve in Alaska will be used (https://certmapper.cr.usgs.gov/data/PubArchives/OF00-200/WELLS/WELLIDX.HTM). However, this project is not exclusive to this data, therefore, the workflow and codes could be applied to data from other database.
+
+The first challenge is loading this file type into the dataframe as base R doesn't have a built in function to properly recognize the LAS file and extract the well log readings without the metadata. A python package called lasio, as described below, would be used to load the data.
+
+## Requirements
+This script requires the user to have both Bash, R and Python on the engine for it to be used. However, the python is required only for the conversion of the data from las to csv. The python package that has to be installed is called `lasio`.
+
+In the R environment, the following packages have to be installed:
+```{r}
+install.packages("ggplot2")
+install.packages("tidyverse")
+install.packages("reticulate")
+```
+
+make the packages active in the session:
+```{r}
+library(ggplot2)
+library(gtable)
+library(grid)
+library(gridExtra)
+library(tidyverse)
+library(reticulate)
+```
+
+## Data Downloading
+Bash is used to automate the downloading of the well logs from the database. In the command line run `bash data_download.sh` to use the script. This well log data in LAS format is stored in a new folder called data in the working directory.
+
+## Data Conversion
+The original format of the data used in this project is .LAS, a special text file format perculiar to the oil and gas industry. To properly read this file, a package in python called `lasio` is used. A script that converts this script to a .csv file is written. This python scripts reads all the files and stores their csv equivalent in a new directory called "data_csv" in the working directory.
+
+To use this python script in R, a python 2 or earlier version must exist in the engine. The `reticulate` package is used to call this script in R. When this script is called, it loops through the data a create the equivalent .csv file without the metadata i.e only the values and the column is stored.  
+
+Note: If you don't have Python on your system, the data has already been converted and stored in the repository, just download the data_csv folder to test the other codes.
+
+```{r}
+source_python('data_conversion.py')
+```
+
+## Organization of Output
+To avoid being overwhelmed with the number of outputs that will be created, directories are created for different classes of outputs.
+
+```{r}
+#Create Subdirectory called output where all output folders will be stored
+dir.create(file.path(".", "Output"))
+
+#Create a new directory to save the images created
+dir.create(file.path("./Output", "Log_Images"))
+
+#Create a new directory to save the new dataframe created for each well
+dir.create(file.path("./Output", "Interpreted_Logs"))
+
+#Create a new directory to save the new VSh images created for each well
+dir.create(file.path("./Output", "VSH_Images"))
+```
+
+
+## Data Visualization
+The first step in petrophysical analysis is quick look interpretation. This is accomplished by visualizing the well logs and discerning some aparent information/interpretation from the quick look.
+
+On the first track, the Gamma ray log is plot. Resistivity log is  plot on the second track with a logarithmic x-axis, the density, neutron and sonic log is plot on the third, fourth and fifth track.
+
+The image is stored in a directory named "Log_Images" and the name of the image corresponds to the well.
+```{r}
+#data visualization
+log_plotting <- function(file){
+  data <- read.csv(sprintf("./data_csv/%s", file), header=T)
+  
+  well <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(file))  #removes the extension in the filename
+  
+  #Gamma Ray Plot  
+  p1 <- ggplot(data,aes(DEPT,GR)) + geom_line(size=0.3)+
+    coord_flip() +
+    scale_x_reverse() +
+    theme(plot.margin = unit(c(0,0.1,0,0), "cm"),
+          plot.background = element_blank()) +
+    ggtitle("GR")
+  
+  #Resistivity Plot
+  p2 <- ggplot(data,aes(DEPT,LL8)) + geom_line(size=0.3, color='blue') + scale_y_log10() + 
+    coord_flip() + scale_x_reverse() +
+    theme(axis.text.y = element_blank(), 
+          axis.ticks.y = element_blank(), 
+          axis.title.y = element_blank(),
+          plot.margin = unit(c(0,0.1,0,0), "cm"),
+          plot.background = element_blank()) +
+    ggtitle("Resistivity")
+  
+  #Density Plot
+  p3 <- ggplot(data,aes(DEPT,RHOB)) + geom_line(size=0.3, color='green') + 
+    coord_flip() + scale_x_reverse() +
+    theme(axis.text.y = element_blank(), 
+          axis.ticks.y = element_blank(), 
+          axis.title.y = element_blank(),
+          plot.margin = unit(c(0,0.1,0,0), "cm"),
+          plot.background = element_blank()) +
+    ggtitle("Density")
+  
+  #Neutron Plot
+  p4 <- ggplot(data,aes(DEPT,NPHI)) + geom_line(size=0.3, color='brown') + 
+    coord_flip() + scale_x_reverse() +
+    theme(axis.text.y = element_blank(), 
+          axis.ticks.y = element_blank(), 
+          axis.title.y = element_blank(),
+          plot.margin = unit(c(0,0.1,0,0), "cm"),
+          plot.background = element_blank()) +
+    ggtitle("Neutron")
+  
+  #Sonic Plot
+  p5 <- ggplot(data,aes(DEPT,DT)) + geom_line(size=0.3, color='red') + 
+    coord_flip() + scale_x_reverse() + scale_y_reverse() +
+    theme(axis.text.y = element_blank(), 
+          axis.ticks.y = element_blank(), 
+          axis.title.y = element_blank(),
+          plot.margin = unit(c(0,0.1,0,0), "cm"),
+          plot.background = element_blank()) +
+    ggtitle("Sonic")
+  
+  #convert the ggplot output into a gtable
+  gt1 <- ggplotGrob(p1)
+  gt2 <- ggplotGrob(p2)
+  gt3 <- ggplotGrob(p3)
+  gt4 <- ggplotGrob(p4)
+  gt5 <- ggplotGrob(p5)
+  
+  newWidth = unit.pmax(gt1$widths[2:3], gt2$widths[2:3])
+  
+  gt1$widths[2:3] = as.list(newWidth)
+  gt2$widths[2:3] = as.list(newWidth)
+  gt3$widths[2:3] = as.list(newWidth)
+  gt4$widths[2:3] = as.list(newWidth)
+  gt5$widths[2:3] = as.list(newWidth)
+  
+  
+  gt = gtable(widths = unit(c(1, 1, 1, 1, 1, .3), "null"), height = unit(20, "null"))
+  
+  # Insert gt1, gt2, gt3, gt4 and gt5 into the new gtable
+  gt <- gtable_add_grob(gt, gt1, 1, 1)
+  gt <- gtable_add_grob(gt, gt2, 1, 2)
+  gt <- gtable_add_grob(gt, gt3, 1, 3)
+  gt <- gtable_add_grob(gt, gt4, 1, 4)
+  gt <- gtable_add_grob(gt, gt5, 1, 5)
+  
+  grid.newpage()
+  grid.draw(gt)
+  ggsave(sprintf("./Output/Log_Images/%s.png", well), plot=gt)
+}
+```
+The input for this funtion is the name of the csv file:
+```{r}
+#test
+log_plotting("AW1.csv")
+```
+## Some Petrophysical Calculations
+__Volume of shale__
+
+Volume of shale is the measure of the clay content of a rock. This is an important property when considering identification of reservoir rocks. The lower the volume the shale, the better the reservoir. There are numerous ways to estimate the volume of shale. The estimated values are then appended into the dataframe. The result is plotted and saved in a new folder called VSH_images.
+
+__Porosity estimation__
+
+Porosity is the ratio of volume of void spaces to the total rock volume of the rock. This property describe the fluid retention ability of a rock and it is an important parameter when dealing with reservoir rocks. There are numerous techniques to estimate the porosity of a rock. The neutron-density approach will be used in this project. Assumptions will be made about the fluid type and matrix type to generalize the estimation for the whole well.
+
+The result of this step is appended to the data as new columns called PHID and PHIND
+
+All the estimated values will be appended to the data and saved in a new text document named by the names of the well.This text file will be saved in a new directory called "Interpreted_Logs"
+```{r}
+#Petrophysical calculation
+vsh_phi_calc <- function(file){
+  well <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(file))
+  sub_data <- read.csv(sprintf("./data_csv/%s", file), header=T)
+  
+  #Volume of SHale Calculation
+  sub_data <- sub_data %>%
+    mutate(VSH_linear = (GR - min(GR, na.rm=TRUE))/(max(GR, na.rm=TRUE) - min(GR, na.rm=TRUE)),
+           VSH_larionov_young = 0.083*(2**(3.7*VSH_linear)-1),
+           VSH_larionov_old = 0.33*(2**(2*VSH_linear)-1),
+           VSH_clavier = 1.7-(3.38-(VSH_linear + 0.7)**2)**0.5,
+           VSH_steiber = 0.5*VSH_linear/(1.5 - VSH_linear))
+ 
+   #Porosity estimation
+  den_ma <- 2.65
+  den_fl <- 1.1
+  sub_data <- sub_data %>%
+    mutate(PHID = (RHOB - den_ma)/(den_fl-den_ma),
+           PHIND = ((NPHI**2 + PHID**2)/2)**0.5)
+ 
+  write.csv(sub_data,file=sprintf("./Output/Interpreted_Logs/%s.csv", well))
+  
+  #store the new interpreted well log data in the global environment as the well name
+  assign(as.character(well), sub_data, envir= .GlobalEnv)
+}
+```
+The input for this funtion is the name of the csv file:
+```{r}
+#test
+vsh_phi_calc("AW1.csv")
+```
+
+The estimated Vshales is plot with the corresponding Gamma ray log. The function below is a script to carryout this task.
+```{r}
+#Plotting the Estimated Vshale
+vsh_plotting <- function(file){
+  data <- read.csv(sprintf("./Output/Interpreted_Logs/%s", file), header=T)
+  well <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(file))
+  
+  #Gamma Ray Plot
+  p1 <- ggplot(data=data,mapping=aes(x = DEPT,y = GR)) + geom_line(size=0.3)+
+    coord_flip() +
+    scale_x_reverse() +
+    theme(plot.margin = unit(c(0,0.2,0,0), "cm"),
+          plot.background = element_blank())
+  
+  colors <- c("VSH_linear" = "blue", "VSH_larionov_young" = "red", "VSH_larionov_old" = "orange",
+              "VSH_clavier"="green", "VSH_steiber"='purple')
+  
+  #The Volume of SHale plot
+  p2 <- ggplot(data, aes(x = DEPT)) + 
+    geom_line(aes(y = VSH_linear, color='VSH_linear'), size=0.1) + 
+    geom_line(aes(y = VSH_larionov_young, color='VSH_larionov_young'), size=0.1) +
+    geom_line(aes(y = VSH_larionov_old, color='VSH_larionov_old'), size=0.1) +
+    geom_line(aes(y = VSH_clavier, color='VSH_clavier'), size=0.1) +
+    geom_line(aes(y = VSH_steiber, color='VSH_steiber'), size=0.1) +
+    labs(y = "Vshale",
+         color = "Legend") +
+    scale_color_manual(values = colors) +
+    coord_flip() + scale_x_reverse() +
+    theme(axis.text.y = element_blank(), 
+          axis.ticks.y = element_blank(), 
+          axis.title.y = element_blank(),
+          plot.margin = unit(c(0,0.5,0,0), "cm"),
+          plot.background = element_blank())
+  
+  gt1 <- ggplotGrob(p1)
+  gt2 <- ggplotGrob(p2)
+  
+  
+  newWidth = unit.pmax(gt1$widths[2:3], gt2$widths[2:3])
+  
+  gt1$widths[2:3] = as.list(newWidth)
+  gt2$widths[2:3] = as.list(newWidth)
+  
+  gt = gtable(widths = unit(c(1, 1.7, .2), "null"), height = unit(50, "null"))
+  
+  # Insert gt1 and gt2 into the new gtable
+  gt <- gtable_add_grob(gt, gt1, 1, 1)
+  gt <- gtable_add_grob(gt, gt2, 1, 2)
+  
+  grid.newpage()
+  grid.draw(gt)
+  ggsave(sprintf("./Output/VSH_Images/%s.png", well), plot=gt)
+}
+```
+
+The input for this function is the name of the csv file:
+```{r}
+#test
+vsh_plotting("AW1.csv")
+```
